@@ -110,15 +110,10 @@ const departmentSchema = new mongoose.Schema(
       required: true,
     },
 
-    // icon: {
+    // color: {
     //   type: String,
-    //   required: true,
+    //   default: "",
     // },
-
-    color: {
-      type: String,
-      default: "",
-    },
 
     // ======================================================
     // Department Features
