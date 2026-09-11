@@ -30,13 +30,13 @@ export const sendMessage = async (req, res) => {
     // Send auto-response confirmation email to the user (non-blocking)
     sendEmail({
       to: email,
-      subject: `Thank you for contacting Usthi Hospital: ${subject || "General Inquiry"}`,
-      text: `Dear ${name},\n\nThank you for reaching out to Usthi Hospital. We have received your inquiry regarding "${subject || "General Inquiry"}" and will get back to you shortly.\n\nYour message details:\nName: ${name}\nPhone: ${phone}\nMessage: ${message}\n\nBest regards,\nUsthi Hospital Team`,
+      subject: `Thank you for contacting Ramachandra Urology & Stone Centre: ${subject || "General Inquiry"}`,
+      text: `Dear ${name},\n\nThank you for reaching out to Ramachandra Urology & Stone Centre. We have received your inquiry regarding "${subject || "General Inquiry"}" and will get back to you shortly.\n\nYour message details:\nName: ${name}\nPhone: ${phone}\nMessage: ${message}\n\nBest regards,\nRamachandra Hospital Team`,
       html: `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="utf-8">
-  <title>Inquiry Received - Usthi Hospital</title>
+  <title>Inquiry Received - Ramachandra Urology & Stone Centre</title>
   <style>
     body {
       font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -55,7 +55,7 @@ export const sendMessage = async (req, res) => {
       border: 1px solid #e2e8f0;
     }
     .header {
-      background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+      background: linear-gradient(135deg, #012442 0%, #0FA8D6 100%);
       color: #ffffff;
       padding: 40px 20px;
       text-align: center;
@@ -123,11 +123,11 @@ export const sendMessage = async (req, res) => {
   <div class="container">
     <div class="header">
       <h1>We have received your message</h1>
-      <p>Usthi Hospital - Contact Center</p>
+      <p>Ramachandra Urology & Stone Centre - Helpdesk</p>
     </div>
     <div class="content">
       <p>Dear <strong>${name}</strong>,</p>
-      <p>Thank you for reaching out to Usthi Hospital. We have received your inquiry and our team is currently reviewing the details. We will get back to you as soon as possible (usually within 24 hours).</p>
+      <p>Thank you for reaching out to Ramachandra Urology & Stone Centre. We have received your inquiry and our team is currently reviewing the details. We will get back to you as soon as possible.</p>
       
       <div class="details">
         <div class="details-title">Inquiry Details</div>
@@ -149,11 +149,11 @@ export const sendMessage = async (req, res) => {
         </div>
       </div>
       
-      <p>If this is an emergency, please do not wait for an email response. Please call our 24/7 emergency services immediately at <strong>9090963722</strong>.</p>
-      <p>Best regards,<br><strong>The Usthi Hospital Team</strong></p>
+      <p>If this is an emergency, please call our 24/7 helpline immediately at <strong>+91 99375 66625</strong>.</p>
+      <p>Best regards,<br><strong>Ramachandra Urology & Stone Centre Team</strong></p>
     </div>
     <div class="footer">
-      <p>&copy; ${new Date().getFullYear()} Usthi Hospital. All rights reserved.</p>
+      <p>&copy; ${new Date().getFullYear()} Ramachandra Urology & Stone Centre. All rights reserved.</p>
       <p>This is an automated response. Please do not reply directly to this email.</p>
     </div>
   </div>
