@@ -3,7 +3,7 @@ import mongoose from "mongoose";
 import DoctorModel from "../model/doctor.model.js";
 import DepartmentModel from "../model/department.model.js";
 import { io } from "../../server.js";
-import cloudinary from "../config/cloudinary.js";
+import { uploadToCloudinary, uploadFileToCloudinary, FOLDERS } from "../util/uploadToCloudinary.js";
 
 import { respond } from "../util/respond.js";
 
@@ -54,33 +54,22 @@ export const addDoctor = async (req, res) => {
     }
 
     // ==================================================
-    // Create Doctor
+    // Photo Upload to Cloudinary
     // ==================================================
     let photoUrl;
-    if (req.file) {
-      const photoDataUri = `data:${req.file.mimetype};base64,${req.file.buffer.toString("base64")}`;
-      try {
-        const uploadResult = await cloudinary.uploader.upload(photoDataUri, {
-          folder: "doctors",
-          resource_type: "image",
-        });
-        photoUrl = uploadResult.secure_url;
-      } catch (uploadErr) {
-        console.error("Cloudinary upload error:", uploadErr);
-        return respond(res, 400, false, "Failed to upload photo");
+    try {
+      if (req.file) {
+        // multer memory upload (multipart/form-data)
+        photoUrl = await uploadFileToCloudinary(req.file, FOLDERS.DOCTOR);
+      } else if (sanitizedData.photo) {
+        // base64 data URI sent in JSON body
+        photoUrl = await uploadToCloudinary(sanitizedData.photo, FOLDERS.DOCTOR);
       }
-    } else if (sanitizedData.photo) {
-      try {
-        const uploadResult = await cloudinary.uploader.upload(sanitizedData.photo, {
-          folder: "doctors",
-          resource_type: "image",
-        });
-        photoUrl = uploadResult.secure_url;
-      } catch (uploadErr) {
-        console.error("Cloudinary upload error:", uploadErr);
-        return respond(res, 400, false, "Failed to upload photo");
-      }
+    } catch (uploadErr) {
+      console.error("Cloudinary upload error:", uploadErr);
+      return respond(res, 400, false, uploadErr.message);
     }
+
 
     const doctor = await DoctorModel.create({
       ...sanitizedData,
@@ -146,32 +135,19 @@ export const updateDoctorById = async (req, res) => {
     }
 
     // ==================================================
-    // Update Doctor
+    // Photo Upload to Cloudinary (if new photo provided)
     // ==================================================
-    if (req.file) {
-      const photoDataUri = `data:${req.file.mimetype};base64,${req.file.buffer.toString("base64")}`;
-      try {
-        const uploadResult = await cloudinary.uploader.upload(photoDataUri, {
-          folder: "doctors",
-          resource_type: "image",
-        });
-        sanitizedData.photo = uploadResult.secure_url;
-      } catch (uploadErr) {
-        console.error("Cloudinary upload error:", uploadErr);
-        return respond(res, 400, false, "Failed to upload photo");
+    try {
+      if (req.file) {
+        sanitizedData.photo = await uploadFileToCloudinary(req.file, FOLDERS.DOCTOR);
+      } else if (sanitizedData.photo) {
+        sanitizedData.photo = await uploadToCloudinary(sanitizedData.photo, FOLDERS.DOCTOR);
       }
-    } else if (sanitizedData.photo) {
-      try {
-        const uploadResult = await cloudinary.uploader.upload(sanitizedData.photo, {
-          folder: "doctors",
-          resource_type: "image",
-        });
-        sanitizedData.photo = uploadResult.secure_url;
-      } catch (uploadErr) {
-        console.error("Cloudinary upload error:", uploadErr);
-        return respond(res, 400, false, "Failed to upload photo");
-      }
+    } catch (uploadErr) {
+      console.error("Cloudinary upload error:", uploadErr);
+      return respond(res, 400, false, uploadErr.message);
     }
+
 
     const updatedDoctor = await populateDoctors(
       DoctorModel.findByIdAndUpdate(id, sanitizedData, {

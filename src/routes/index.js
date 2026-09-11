@@ -2,6 +2,8 @@ import express from "express";
 import adminRoutes from "../routes/admin.routes.js";
 import doctorRoutes from "../routes/doctor.routes.js";
 import departmentRoutes from "../routes/department.routes.js";
+import featureRoutes from "../routes/feature.routes.js";
+import diseaseRoutes from "../routes/disease.routes.js";
 import patientRoutes from "../routes/patient.routes.js";
 import appointmentRequestRoutes from "../routes/appointmentRequest.routes.js";
 import galleryRoutes from "../routes/gallery.routes.js";
@@ -29,6 +31,16 @@ router.use("/patient", patientRoutes);
 // Department Routes
 //===========================================
 router.use("/department", departmentRoutes);
+
+//===========================================
+// Feature Routes
+//===========================================
+router.use("/feature", featureRoutes);
+
+//===========================================
+// Disease Routes
+//===========================================
+router.use("/disease", diseaseRoutes);
 
 //===========================================
 // Appointment Request Routes

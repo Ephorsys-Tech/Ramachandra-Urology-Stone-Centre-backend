@@ -1,44 +1,19 @@
-
 import mongoose from "mongoose";
 
-const doctorSchema = new mongoose.Schema(
-  {
-    name: {
-      type: String,
-      required: true,
-      trim: true,
-    },
-
-    specialty: {
-      type: String,
-      required: true,
-      trim: true,
-    },
-
-    image: {
-      type: String,
-      default: "",
-    },
-  },
-  { _id: false }
-);
-
-const diseaseSchema = new mongoose.Schema(
-  {
-    name: {
-      type: String,
-      required: true,
-      trim: true,
-    },
-
-    description: {
-      type: String,
-      required: true,
-      trim: true,
-    },
-  },
-  { _id: false }
-);
+// ─────────────────────────────────────────────────────────────────────────────
+// Department Model
+//
+// Relationships (all via ObjectId refs + populate):
+//   doctors  → DoctorModel   (Doctor.department points back here)
+//   features → FeatureModel  (Feature.department points back here)
+//   diseases → DiseaseModel  (Disease.department points back here)
+//
+// Public UI shows only:
+//   - departments  where published = true
+//   - features     where isActive  = true
+//   - diseases     where isActive  = true
+//   - doctors      where isAvailable = true
+// ─────────────────────────────────────────────────────────────────────────────
 
 const scheduleSchema = new mongoose.Schema(
   {
@@ -105,37 +80,56 @@ const departmentSchema = new mongoose.Schema(
       required: true,
     },
 
-    image: {
-      type: String,
-      required: true,
-    },
 
-    // color: {
-    //   type: String,
-    //   default: "",
-    // },
 
     // ======================================================
-    // Department Features
+    // Features (ObjectId refs → FeatureModel)
+    // ======================================================
+    // Feature.department points back to this Department.
+    // populate("features") fetches full live Feature documents.
+    // Public users see only features where isActive = true.
     // ======================================================
 
     features: [
       {
-        type: String,
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Feature",
       },
     ],
 
     // ======================================================
-    // Doctors
+    // Doctors (ObjectId refs → DoctorModel)
+    // ======================================================
+    // This is a virtual-like relationship:
+    //   - DoctorModel.department = ObjectId → this Department
+    //   - Querying with .populate("doctors") gives full doctor data
+    //   - No need to manually add/remove doctors here —
+    //     assigning a doctor to this department is enough.
+    //   - The `doctors` field below is kept for explicit linking
+    //     (e.g. when creating a department and associating existing doctors).
     // ======================================================
 
-    doctors: [doctorSchema],
+    doctors: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Doctor",
+      },
+    ],
 
     // ======================================================
-    // Diseases
+    // Diseases (ObjectId refs → DiseaseModel)
+    // ======================================================
+    // Disease.department points back to this Department.
+    // populate("diseases") fetches full live Disease documents.
+    // Public users see only diseases where isActive = true.
     // ======================================================
 
-    diseases: [diseaseSchema],
+    diseases: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Disease",
+      },
+    ],
 
     // ======================================================
     // Timing & Availability
@@ -171,17 +165,17 @@ const departmentSchema = new mongoose.Schema(
     // ======================================================
     // Department Visibility in UI
     // ======================================================
-    
+
     showInHomePage: {
       type: Boolean,
       default: false,
     },
-    
+
     showInServicesPage: {
       type: Boolean,
       default: false,
     },
-    
+
     orderIndex: {
       type: Number,
       default: 0,
@@ -195,5 +189,3 @@ const departmentSchema = new mongoose.Schema(
 const Department = mongoose.model("Department", departmentSchema);
 
 export default Department;
-
-
