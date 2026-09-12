@@ -34,71 +34,99 @@ const estimateBase64Size = (dataUri) => {
 
 // ─── Main Upload Function ─────────────────────────────────────────────────────
 /**
- * Upload an image to Cloudinary.
- *
- * @param {string | Buffer} input
- *   - base64 data URI  ("data:image/jpeg;base64,...")
- *   - raw Buffer (from multer memory storage)
- *   - mimetype (needed when input is a Buffer — pass as 3rd arg)
- *   - already a Cloudinary URL → returned as-is (no re-upload)
- *   - empty string / null / undefined → returns null (no upload)
- *
- * @param {string} folder  One of the FOLDERS constants
- * @param {string} [mimetype]  Required when input is a Buffer
- *
- * @returns {Promise<string | null>}  Cloudinary secure_url, or null
- *
- * @throws {Error}  If file exceeds 5 MB or format is not allowed
+ * Upload an image to Cloudinary and return full details ({ url, public_id }).
  */
-export const uploadToCloudinary = async (input, folder, mimetype) => {
-  // ── Nothing to upload ──────────────────────────────────────────────────────
+export const uploadToCloudinaryDetails = async (input, folder, mimetype) => {
   if (!input) return null;
 
-  // ── Already a live Cloudinary URL → skip re-upload ──────────────────────
-  if (isCloudinaryUrl(input)) return input;
+  // 1. If already a live Cloudinary URL, skip re-upload
+  if (typeof input === "string" && isCloudinaryUrl(input)) {
+    return { url: input, public_id: null };
+  }
 
-  let dataUri;
+  let uploadPayload;
 
-  // ── Convert Buffer → data URI (multer memory upload) ──────────────────────
+  // 2. Buffer upload (from multer)
   if (Buffer.isBuffer(input)) {
     if (!mimetype) throw new Error("mimetype is required when uploading a Buffer");
-    dataUri = `data:${mimetype};base64,${input.toString("base64")}`;
-  } else if (isBase64DataUri(input)) {
-    dataUri = input;
+    uploadPayload = `data:${mimetype};base64,${input.toString("base64")}`;
+  }
+  // 3. String upload (Data URI, HTTP URL, or raw base64 string)
+  else if (typeof input === "string") {
+    const trimmed = input.trim();
+    if (!trimmed) return null;
+
+    if (trimmed.startsWith("data:image") || trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+      uploadPayload = trimmed;
+    } else {
+      // Raw base64 string without data:image header
+      uploadPayload = `data:image/jpeg;base64,${trimmed}`;
+    }
   } else {
-    // Plain URL that is not Cloudinary — we don't re-upload external URLs
-    return input;
+    return null;
   }
 
-  // ── Validate file size (≤ 5 MB) ────────────────────────────────────────────
-  const estimatedBytes = estimateBase64Size(dataUri);
-  if (estimatedBytes > MAX_FILE_SIZE_BYTES) {
-    const sizeMB = (estimatedBytes / (1024 * 1024)).toFixed(2);
-    throw new Error(
-      `Image size ${sizeMB} MB exceeds the maximum allowed size of ${MAX_FILE_SIZE_MB} MB`
-    );
+  // 4. Validate file size if it's a data URI
+  if (typeof uploadPayload === "string" && uploadPayload.startsWith("data:image")) {
+    const estimatedBytes = estimateBase64Size(uploadPayload);
+    if (estimatedBytes > MAX_FILE_SIZE_BYTES) {
+      const sizeMB = (estimatedBytes / (1024 * 1024)).toFixed(2);
+      throw new Error(
+        `Image size ${sizeMB} MB exceeds the maximum allowed size of ${MAX_FILE_SIZE_MB} MB`
+      );
+    }
   }
 
-  // ── Upload to Cloudinary ───────────────────────────────────────────────────
-  const result = await cloudinary.uploader.upload(dataUri, {
+  // 5. Upload to Cloudinary
+  const result = await cloudinary.uploader.upload(uploadPayload, {
     folder,
     resource_type:   "image",
-    allowed_formats: ALLOWED_FORMATS,    // Cloudinary will reject other formats
-    // Cloudinary transformation: auto quality + format, cap dimensions at 2000px
+    allowed_formats: ALLOWED_FORMATS,
     transformation: [
       { quality: "auto", fetch_format: "auto" },
       { width: 2000, height: 2000, crop: "limit" },
     ],
   });
 
-  return result.secure_url;
+  return {
+    url: result.secure_url,
+    public_id: result.public_id,
+  };
 };
 
 /**
- * Convenience wrapper for multer req.file uploads.
- * Usage: await uploadFileToCloudinary(req.file, FOLDERS.DOCTOR)
+ * Upload an image to Cloudinary and return secure_url (legacy helper).
+ */
+export const uploadToCloudinary = async (input, folder, mimetype) => {
+  const result = await uploadToCloudinaryDetails(input, folder, mimetype);
+  return result ? result.url : null;
+};
+
+/**
+ * Convenience wrapper for multer req.file uploads returning details.
+ */
+export const uploadFileToCloudinaryDetails = async (file, folder) => {
+  if (!file) return null;
+  return uploadToCloudinaryDetails(file.buffer, folder, file.mimetype);
+};
+
+/**
+ * Convenience wrapper for multer req.file uploads returning secure_url.
  */
 export const uploadFileToCloudinary = async (file, folder) => {
   if (!file) return null;
   return uploadToCloudinary(file.buffer, folder, file.mimetype);
 };
+
+/**
+ * Delete image from Cloudinary by public_id.
+ */
+export const deleteFromCloudinary = async (publicId) => {
+  if (!publicId) return;
+  try {
+    await cloudinary.uploader.destroy(publicId);
+  } catch (err) {
+    console.error("Cloudinary deletion error for public_id:", publicId, err);
+  }
+};
+
