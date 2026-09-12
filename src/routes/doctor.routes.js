@@ -19,13 +19,15 @@ const router = express.Router();
 // Doctor Authentication Routes
 // ------------------------------------------------------
 
+const uploadMiddleware = upload.any();
+
 // Add Doctor
 // POST -> /api/v1/doctor/add
-router.post("/add", protect, upload.single("photo"), addDoctor);
+router.post("/add", protect, uploadMiddleware, addDoctor);
 
 // Update Doctor
 // PUT -> /api/v1/doctor/update/:id
-router.put("/update/:id", protect, upload.single("photo"), updateDoctorById);
+router.put("/update/:id", protect, uploadMiddleware, updateDoctorById);
 
 // Remove Doctor
 // DELETE -> /api/v1/doctor/remove/:id

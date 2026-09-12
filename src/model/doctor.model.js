@@ -50,6 +50,10 @@ const doctorSchema = new mongoose.Schema(
       type: String,
       trim: true,
     },
+    photoPublicId: {
+      type: String,
+      trim: true,
+    },
     qualifications: {
       type: String,
       trim: true,

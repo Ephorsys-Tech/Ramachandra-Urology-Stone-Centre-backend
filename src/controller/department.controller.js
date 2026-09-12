@@ -29,15 +29,28 @@ const resolveObjectIds = async (ids, Model) => {
   return { validIds: found.map((d) => d._id), invalid: [] };
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Helper: deep populate a department document (doctors + features + diseases)
-// Used after create / save to return a fully populated response
-// ─────────────────────────────────────────────────────────────────────────────
+// Helper to deep populate department documents
 const populateDepartment = (query) =>
   query
-    .populate("doctors",  "name specialization photo experience qualifications isAvailable timing")
+    .populate("doctors",  "name specialization photo photoPublicId experience qualifications isAvailable timing description")
     .populate("features", "name description isActive orderIndex")
     .populate("diseases", "name description isActive orderIndex");
+
+// Helper to auto-sync doctors assigned to department in DoctorModel into DepartmentModel.doctors array
+const syncDepartmentDoctors = async (departments) => {
+  if (!departments) return;
+  const list = Array.isArray(departments) ? departments : [departments];
+  for (const dept of list) {
+    if (!dept || !dept._id) continue;
+    const assignedDoctors = await DoctorModel.find({ department: dept._id }).select("_id");
+    const assignedIds = assignedDoctors.map((d) => d._id);
+    if (assignedIds.length > 0) {
+      await DepartmentModel.findByIdAndUpdate(dept._id, {
+        $addToSet: { doctors: { $each: assignedIds } },
+      });
+    }
+  }
+};
 
 // =============================================================================
 // ADD DEPARTMENT
@@ -279,6 +292,9 @@ export const deleteDepartmentById = async (req, res) => {
 // =============================================================================
 export const getAllDepartments = async (req, res) => {
   try {
+    const rawDepartments = await DepartmentModel.find().select("_id");
+    await syncDepartmentDoctors(rawDepartments);
+
     const departments = await populateDepartment(
       DepartmentModel.find().sort({ orderIndex: 1, createdAt: -1 })
     );
@@ -297,10 +313,13 @@ export const getAllDepartments = async (req, res) => {
 // =============================================================================
 export const getPublishedDepartments = async (req, res) => {
   try {
+    const rawDepartments = await DepartmentModel.find({ published: true }).select("_id");
+    await syncDepartmentDoctors(rawDepartments);
+
     const departments = await DepartmentModel
       .find({ published: true })
       .sort({ orderIndex: 1, createdAt: -1 })
-      .populate("doctors",  "name specialization photo experience isAvailable timing")
+      .populate("doctors",  "name specialization photo photoPublicId experience qualifications isAvailable timing description")
       .populate({
         path:  "features",
         match: { isActive: true },   // only active features for public
@@ -332,9 +351,14 @@ export const getDepartmentBySlug = async (req, res) => {
 
     if (!slug) return respond(res, 400, false, "Slug is required");
 
+    const rawDepartment = await DepartmentModel.findOne({ slug }).select("_id");
+    if (rawDepartment) {
+      await syncDepartmentDoctors(rawDepartment);
+    }
+
     const department = await DepartmentModel
       .findOne({ slug })
-      .populate("doctors",  "name specialization photo experience qualifications isAvailable timing description")
+      .populate("doctors",  "name specialization photo photoPublicId experience qualifications isAvailable timing description")
       .populate({
         path:  "features",
         match: { isActive: true },
