@@ -33,6 +33,11 @@ router.put("/update/:id", protect, uploadMiddleware, updateDoctorById);
 // DELETE -> /api/v1/doctor/remove/:id
 router.delete("/remove/:id", protect, deleteDoctorById);
 
+
+// ----------------------------
+//        PUBLIC Routes
+// ----------------------------
+
 // Get All Doctors
 // GET -> /api/v1/doctor/getAll
 router.get("/getAll", getAllDoctors);

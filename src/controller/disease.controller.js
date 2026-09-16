@@ -44,8 +44,13 @@ export const addDisease = async (req, res) => {
       name:        name.trim(),
       description: description.trim(),
       department,
-      isActive:    isActive !== undefined ? Boolean(isActive) : true,
+      isActive:    isActive !== undefined ? (typeof isActive === "string" ? isActive === "true" : Boolean(isActive)) : true,
       orderIndex:  typeof orderIndex === "number" ? orderIndex : 0,
+    });
+
+    // Synchronize disease into Department schema diseases array
+    await DepartmentModel.findByIdAndUpdate(department, {
+      $addToSet: { diseases: disease._id },
     });
 
     const populated = await populateDisease(DiseaseModel.findById(disease._id));
@@ -87,13 +92,21 @@ export const updateDiseaseById = async (req, res) => {
       if (!deptExists) {
         return respond(res, 404, false, "Department not found");
       }
+      if (disease.department && disease.department.toString() !== department.toString()) {
+        await DepartmentModel.findByIdAndUpdate(disease.department, {
+          $pull: { diseases: disease._id },
+        });
+        await DepartmentModel.findByIdAndUpdate(department, {
+          $addToSet: { diseases: disease._id },
+        });
+      }
       disease.department = department;
     }
 
     // ── Apply updates ─────────────────────────────────────────────────────────
     if (name !== undefined)        disease.name        = name.trim();
     if (description !== undefined) disease.description = description.trim();
-    if (isActive !== undefined)    disease.isActive    = Boolean(isActive);
+    if (isActive !== undefined)    disease.isActive    = typeof isActive === "string" ? isActive === "true" : Boolean(isActive);
     if (orderIndex !== undefined)  disease.orderIndex  = Number(orderIndex);
 
     await disease.save();
@@ -124,6 +137,12 @@ export const deleteDiseaseById = async (req, res) => {
     const disease = await DiseaseModel.findById(id);
     if (!disease) {
       return respond(res, 404, false, "Disease not found");
+    }
+
+    if (disease.department) {
+      await DepartmentModel.findByIdAndUpdate(disease.department, {
+        $pull: { diseases: id },
+      });
     }
 
     await disease.deleteOne();
@@ -215,11 +234,16 @@ export const getActiveDiseasesByDepartment = async (req, res) => {
       return respond(res, 400, false, "Invalid department ID");
     }
 
+    const deptExists = await DepartmentModel.findById(departmentId).select("_id name");
+    if (!deptExists) {
+      return respond(res, 404, false, "Department not found");
+    }
+
     // Public sees ONLY active diseases
     const diseases = await DiseaseModel
       .find({ department: departmentId, isActive: true })
       .sort({ orderIndex: 1, createdAt: 1 })
-      .select("name description orderIndex");
+      .select("name description orderIndex isActive department");
 
     return respond(res, 200, true, "Diseases retrieved successfully", diseases);
   } catch (error) {

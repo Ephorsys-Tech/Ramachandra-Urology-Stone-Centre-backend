@@ -41,8 +41,13 @@ export const addFeature = async (req, res) => {
       name:        name.trim(),
       description: description?.trim() || "",
       department,
-      isActive:    isActive !== undefined ? Boolean(isActive) : true,
+      isActive:    isActive !== undefined ? (typeof isActive === "string" ? isActive === "true" : Boolean(isActive)) : true,
       orderIndex:  typeof orderIndex === "number" ? orderIndex : 0,
+    });
+
+    // Synchronize feature into Department schema features array
+    await DepartmentModel.findByIdAndUpdate(department, {
+      $addToSet: { features: feature._id },
     });
 
     const populated = await populateFeature(FeatureModel.findById(feature._id));
@@ -84,13 +89,21 @@ export const updateFeatureById = async (req, res) => {
       if (!deptExists) {
         return respond(res, 404, false, "Department not found");
       }
+      if (feature.department && feature.department.toString() !== department.toString()) {
+        await DepartmentModel.findByIdAndUpdate(feature.department, {
+          $pull: { features: feature._id },
+        });
+        await DepartmentModel.findByIdAndUpdate(department, {
+          $addToSet: { features: feature._id },
+        });
+      }
       feature.department = department;
     }
 
     // ── Apply updates ─────────────────────────────────────────────────────────
     if (name !== undefined)        feature.name        = name.trim();
     if (description !== undefined) feature.description = description.trim();
-    if (isActive !== undefined)    feature.isActive    = Boolean(isActive);
+    if (isActive !== undefined)    feature.isActive    = typeof isActive === "string" ? isActive === "true" : Boolean(isActive);
     if (orderIndex !== undefined)  feature.orderIndex  = Number(orderIndex);
 
     await feature.save();
@@ -121,6 +134,12 @@ export const deleteFeatureById = async (req, res) => {
     const feature = await FeatureModel.findById(id);
     if (!feature) {
       return respond(res, 404, false, "Feature not found");
+    }
+
+    if (feature.department) {
+      await DepartmentModel.findByIdAndUpdate(feature.department, {
+        $pull: { features: id },
+      });
     }
 
     await feature.deleteOne();
@@ -212,11 +231,16 @@ export const getActiveFeaturesByDepartment = async (req, res) => {
       return respond(res, 400, false, "Invalid department ID");
     }
 
+    const deptExists = await DepartmentModel.findById(departmentId).select("_id name");
+    if (!deptExists) {
+      return respond(res, 404, false, "Department not found");
+    }
+
     // Public sees ONLY active features
     const features = await FeatureModel
       .find({ department: departmentId, isActive: true })
       .sort({ orderIndex: 1, createdAt: 1 })
-      .select("name description orderIndex");
+      .select("name description orderIndex isActive department");
 
     return respond(res, 200, true, "Features retrieved successfully", features);
   } catch (error) {
