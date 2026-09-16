@@ -52,6 +52,34 @@ const syncDepartmentDoctors = async (departments) => {
   }
 };
 
+// Helper to auto-sync features assigned to department in FeatureModel into DepartmentModel.features array
+const syncDepartmentFeatures = async (departments) => {
+  if (!departments) return;
+  const list = Array.isArray(departments) ? departments : [departments];
+  for (const dept of list) {
+    if (!dept || !dept._id) continue;
+    const assignedFeatures = await FeatureModel.find({ department: dept._id }).select("_id");
+    const assignedIds = assignedFeatures.map((f) => f._id);
+    await DepartmentModel.findByIdAndUpdate(dept._id, {
+      $set: { features: assignedIds },
+    });
+  }
+};
+
+// Helper to auto-sync diseases assigned to department in DiseaseModel into DepartmentModel.diseases array
+const syncDepartmentDiseases = async (departments) => {
+  if (!departments) return;
+  const list = Array.isArray(departments) ? departments : [departments];
+  for (const dept of list) {
+    if (!dept || !dept._id) continue;
+    const assignedDiseases = await DiseaseModel.find({ department: dept._id }).select("_id");
+    const assignedIds = assignedDiseases.map((d) => d._id);
+    await DepartmentModel.findByIdAndUpdate(dept._id, {
+      $set: { diseases: assignedIds },
+    });
+  }
+};
+
 // =============================================================================
 // ADD DEPARTMENT
 // POST → /api/v1/department/add
@@ -293,7 +321,11 @@ export const deleteDepartmentById = async (req, res) => {
 export const getAllDepartments = async (req, res) => {
   try {
     const rawDepartments = await DepartmentModel.find().select("_id");
-    await syncDepartmentDoctors(rawDepartments);
+    await Promise.all([
+      syncDepartmentDoctors(rawDepartments),
+      syncDepartmentFeatures(rawDepartments),
+      syncDepartmentDiseases(rawDepartments),
+    ]);
 
     const departments = await populateDepartment(
       DepartmentModel.find().sort({ orderIndex: 1, createdAt: -1 })
@@ -314,7 +346,11 @@ export const getAllDepartments = async (req, res) => {
 export const getPublishedDepartments = async (req, res) => {
   try {
     const rawDepartments = await DepartmentModel.find({ published: true }).select("_id");
-    await syncDepartmentDoctors(rawDepartments);
+    await Promise.all([
+      syncDepartmentDoctors(rawDepartments),
+      syncDepartmentFeatures(rawDepartments),
+      syncDepartmentDiseases(rawDepartments),
+    ]);
 
     const departments = await DepartmentModel
       .find({ published: true })
@@ -353,7 +389,11 @@ export const getDepartmentBySlug = async (req, res) => {
 
     const rawDepartment = await DepartmentModel.findOne({ slug }).select("_id");
     if (rawDepartment) {
-      await syncDepartmentDoctors(rawDepartment);
+      await Promise.all([
+        syncDepartmentDoctors(rawDepartment),
+        syncDepartmentFeatures(rawDepartment),
+        syncDepartmentDiseases(rawDepartment),
+      ]);
     }
 
     const department = await DepartmentModel
