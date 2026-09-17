@@ -4,6 +4,10 @@ import {
   generateAccessToken,
   generateRefreshToken,
   verifyRefreshToken,
+  accessCookieOptions,
+  refreshCookieOptions,
+  clearCookieOptions,
+  REFRESH_COOKIE_MAX_AGE_MS,
 } from "../util/generateToken.js";
 import { respond } from "../util/respond.js";
 import sendEmail from "../util/sendEmail.js";
@@ -89,7 +93,11 @@ export const loginAdmin = async (req, res) => {
       return respond(res, 400, false, "Email and Password are Required");
     }
 
-    const admin = await AdminModel.findOne({ email });
+    // ── Fetch admin with refresh-token fields (normally select:false) ──────────
+    const admin = await AdminModel
+      .findOne({ email: email.trim().toLowerCase() })
+      .select("+refreshToken +refreshTokenExpiry");
+
     if (!admin) {
       return respond(res, 404, false, "Admin Not Found");
     }
@@ -99,26 +107,28 @@ export const loginAdmin = async (req, res) => {
       return respond(res, 401, false, "Invalid Credentials");
     }
 
-    // Generate Short-lived Access Token (15 min) & Long-lived Refresh Token (7 days)
+    // ── Generate tokens ───────────────────────────────────────────────────────
     const accessToken = generateAccessToken(admin._id);
     const refreshToken = generateRefreshToken(admin._id);
 
-    const isProduction = process.env.NODE_ENV === "production";
+    // ── Persist hashed refresh token + expiry in DB ───────────────────────────
+    // saveRefreshToken() hashes the raw token with SHA-256 before storing it.
+    await admin.saveRefreshToken(refreshToken, REFRESH_COOKIE_MAX_AGE_MS);
 
-    // Set Refresh Token in Secure httpOnly Cookie (Inaccessible to malicious JS/XSS)
-    res.cookie("refreshToken", refreshToken, {
-      httpOnly: true,
-      secure: isProduction,
-      sameSite: isProduction ? "none" : "lax",
-      maxAge: 7 * 24 * 60 * 60 * 1000,
-    });
+    // ── Set httpOnly cookies (expiry driven entirely by .env) ─────────────────
+    // Access token cookie — short-lived (e.g. 15 min)
+    res.cookie("accessToken", accessToken, accessCookieOptions());
+    // Refresh token cookie — long-lived (e.g. 7 days)
+    res.cookie("refreshToken", refreshToken, refreshCookieOptions());
 
     return respond(res, 200, true, "Login Successful", {
       _id: admin._id,
       name: admin.name,
       email: admin.email,
       role: admin.role,
-      accessToken,
+      // Access token is also returned in the body so the client can store
+      // it in memory (NOT localStorage) for Bearer-header based requests.
+      // accessToken,
     });
   } catch (error) {
     console.error("Login Admin Error:", error);
@@ -134,33 +144,62 @@ export const loginAdmin = async (req, res) => {
 
 export const refreshTokenAdmin = async (req, res) => {
   try {
-    const refreshToken = req.cookies?.refreshToken;
+    const incomingRefreshToken = req.cookies?.refreshToken;
 
-    if (!refreshToken) {
+    if (!incomingRefreshToken) {
       return respond(res, 401, false, "No refresh token provided");
     }
 
-    const decoded = verifyRefreshToken(refreshToken);
-    const admin = await AdminModel.findById(decoded.id).select("-password");
-
-    if (!admin) {
-      return respond(res, 401, false, "Invalid refresh token or user not found");
+    // ── Step 1: Verify JWT signature & expiry ─────────────────────────────────
+    let decoded;
+    try {
+      decoded = verifyRefreshToken(incomingRefreshToken);
+    } catch {
+      // Clear stale / tampered cookies immediately
+      res.clearCookie("accessToken", clearCookieOptions());
+      res.clearCookie("refreshToken", clearCookieOptions());
+      return respond(res, 401, false, "Refresh token is invalid or has expired");
     }
 
-    // Generate new 15-minute access token
+    // ── Step 2: Load admin with stored hash fields ────────────────────────────
+    const admin = await AdminModel
+      .findById(decoded.id)
+      .select("+refreshToken +refreshTokenExpiry");
+
+    if (!admin) {
+      return respond(res, 401, false, "Admin not found");
+    }
+
+    // ── Step 3: Verify the raw token matches the DB hash (prevent replay) ──────
+    const isValid = admin.verifyStoredRefreshToken(incomingRefreshToken);
+    if (!isValid) {
+      // Token was already used or revoked — wipe everything
+      await admin.clearRefreshToken();
+      res.clearCookie("accessToken", clearCookieOptions());
+      res.clearCookie("refreshToken", clearCookieOptions());
+      return respond(res, 401, false, "Refresh token has been revoked or expired");
+    }
+
+    // ── Step 4: Rotate — issue new access + refresh tokens (old refresh revoked) ─
     const newAccessToken = generateAccessToken(admin._id);
+    const newRefreshToken = generateRefreshToken(admin._id);
+
+    // Save new hashed refresh token to DB (overwrites previous)
+    await admin.saveRefreshToken(newRefreshToken, REFRESH_COOKIE_MAX_AGE_MS);
+
+    // Set fresh cookies
+    res.cookie("accessToken", newAccessToken, accessCookieOptions());
+    res.cookie("refreshToken", newRefreshToken, refreshCookieOptions());
 
     return respond(res, 200, true, "Token Refreshed Successfully", {
       _id: admin._id,
       name: admin.name,
       email: admin.email,
       role: admin.role,
-      accessToken: newAccessToken,
+      // accessToken: newAccessToken,
     });
   } catch (error) {
-    return respond(res, 401, false, "Invalid or expired refresh token", {
-      error: error.message,
-    });
+    return respond(res, 401, false, "Token refresh failed", { error: error.message });
   }
 };
 
@@ -172,13 +211,26 @@ export const refreshTokenAdmin = async (req, res) => {
 
 export const LogoutAdmin = async (req, res) => {
   try {
-    const isProduction = process.env.NODE_ENV === "production";
+    const incomingRefreshToken = req.cookies?.refreshToken;
 
-    res.clearCookie("refreshToken", {
-      httpOnly: true,
-      sameSite: isProduction ? "none" : "lax",
-      secure: isProduction,
-    });
+    // ── Revoke DB token if we can identify the admin ──────────────────────────
+    if (incomingRefreshToken) {
+      try {
+        const decoded = verifyRefreshToken(incomingRefreshToken);
+        const admin = await AdminModel
+          .findById(decoded.id)
+          .select("+refreshToken +refreshTokenExpiry");
+        if (admin) {
+          await admin.clearRefreshToken();
+        }
+      } catch {
+        // Token already expired / invalid — still clear the cookies below
+      }
+    }
+
+    // ── Clear both httpOnly cookies ───────────────────────────────────────────
+    res.clearCookie("accessToken", clearCookieOptions());
+    res.clearCookie("refreshToken", clearCookieOptions());
 
     return respond(res, 200, true, "Logout Successful");
   } catch (error) {

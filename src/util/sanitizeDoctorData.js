@@ -12,7 +12,22 @@ const sanitizeDoctorData = (data = {}) => {
     specialization: sanitizeString(data.specialization),
     experience: data.experience !== undefined && data.experience !== "" ? Number(data.experience) : undefined,
     department: sanitizeString(data.department),
-    photo: sanitizeString(data.photo),
+    photo:
+      sanitizeString(data.photo) ||
+      sanitizeString(data.image) ||
+      sanitizeString(data.file) ||
+      sanitizeString(data.avatar) ||
+      sanitizeString(data.picture) ||
+      sanitizeString(data.img) ||
+      sanitizeString(data.doctorImage) ||
+      sanitizeString(data.photoUrl) ||
+      sanitizeString(data.imageUrl) ||
+      sanitizeString(data.image_url),
+    photoPublicId:
+      sanitizeString(data.photoPublicId) ||
+      sanitizeString(data.public_id) ||
+      sanitizeString(data.publicId) ||
+      sanitizeString(data.imagePublicId),
     qualifications: sanitizeString(data.qualifications),
     description: sanitizeString(data.description),
     languages: sanitizeString(data.languages),

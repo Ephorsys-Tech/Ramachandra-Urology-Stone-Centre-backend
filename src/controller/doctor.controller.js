@@ -3,7 +3,12 @@ import mongoose from "mongoose";
 import DoctorModel from "../model/doctor.model.js";
 import DepartmentModel from "../model/department.model.js";
 import { io } from "../../server.js";
-import cloudinary from "../config/cloudinary.js";
+import {
+  uploadToCloudinaryDetails,
+  uploadFileToCloudinaryDetails,
+  deleteFromCloudinary,
+  FOLDERS,
+} from "../util/uploadToCloudinary.js";
 
 import { respond } from "../util/respond.js";
 
@@ -19,6 +24,20 @@ const doctorPopulation = [
 ];
 
 const populateDoctors = (query) => query.populate(doctorPopulation);
+
+// Helper to extract uploaded file from req.file or req.files
+const getUploadedFile = (req) => {
+  if (req.file) return req.file;
+  if (Array.isArray(req.files) && req.files.length > 0) {
+    return req.files[0];
+  }
+  if (req.files && typeof req.files === "object") {
+    if (req.files.photo?.[0]) return req.files.photo[0];
+    if (req.files.image?.[0]) return req.files.image[0];
+    if (req.files.file?.[0]) return req.files.file[0];
+  }
+  return null;
+};
 
 // ======================================================
 // Add Doctor
@@ -43,8 +62,6 @@ export const addDoctor = async (req, res) => {
       return respond(res, 400, false, validationError);
     }
 
-
-
     const department = await DepartmentModel.findById(
       sanitizedData.department,
     );
@@ -54,41 +71,53 @@ export const addDoctor = async (req, res) => {
     }
 
     // ==================================================
-    // Create Doctor
+    // Photo Upload to Cloudinary
     // ==================================================
-    let photoUrl;
-    if (req.file) {
-      const photoDataUri = `data:${req.file.mimetype};base64,${req.file.buffer.toString("base64")}`;
-      try {
-        const uploadResult = await cloudinary.uploader.upload(photoDataUri, {
-          folder: "doctors",
-          resource_type: "image",
-        });
-        photoUrl = uploadResult.secure_url;
-      } catch (uploadErr) {
-        console.error("Cloudinary upload error:", uploadErr);
-        return respond(res, 400, false, "Failed to upload photo");
+    const uploadedFile = getUploadedFile(req);
+    console.log("Add Doctor Uploaded File Check:", {
+      hasFile: !!req.file,
+      filesCount: Array.isArray(req.files) ? req.files.length : req.files ? Object.keys(req.files).length : 0,
+      detectedUploadedFile: uploadedFile ? { originalname: uploadedFile.originalname, mimetype: uploadedFile.mimetype, size: uploadedFile.size } : null,
+      bodyPhoto: sanitizedData.photo ? `${sanitizedData.photo.substring(0, 30)}...` : undefined,
+    });
+
+    let photoDetails = null;
+    try {
+      if (uploadedFile) {
+        photoDetails = await uploadFileToCloudinaryDetails(uploadedFile, FOLDERS.DOCTOR);
+      } else if (sanitizedData.photo) {
+        photoDetails = await uploadToCloudinaryDetails(sanitizedData.photo, FOLDERS.DOCTOR);
+      } else {
+        return respond(
+          res,
+          400,
+          false,
+          "Doctor photo is required. Please click on the photo field in Postman/Frontend to re-select your image file and send it."
+        );
       }
-    } else if (sanitizedData.photo) {
-      try {
-        const uploadResult = await cloudinary.uploader.upload(sanitizedData.photo, {
-          folder: "doctors",
-          resource_type: "image",
-        });
-        photoUrl = uploadResult.secure_url;
-      } catch (uploadErr) {
-        console.error("Cloudinary upload error:", uploadErr);
-        return respond(res, 400, false, "Failed to upload photo");
-      }
+    } catch (uploadErr) {
+      console.error("Cloudinary upload error:", uploadErr);
+      const errMsg = uploadErr?.message || (typeof uploadErr === "string" ? uploadErr : "Cloudinary image upload failed");
+      return respond(res, 400, false, errMsg);
+    }
+
+    if (!photoDetails || !photoDetails.url) {
+      return respond(res, 400, false, "Failed to generate Cloudinary photo URL for doctor");
     }
 
     const doctor = await DoctorModel.create({
       ...sanitizedData,
-      ...(photoUrl ? { photo: photoUrl } : {}),
+      photo: photoDetails.url,
+      photoPublicId: photoDetails.public_id || "",
       isAvailable:
         typeof sanitizedData.isAvailable === "boolean"
           ? sanitizedData.isAvailable
           : true,
+    });
+
+    // Synchronize doctor into Department schema doctors array directly
+    await DepartmentModel.findByIdAndUpdate(sanitizedData.department, {
+      $addToSet: { doctors: doctor._id },
     });
 
     const populatedDoctor = await populateDoctors(
@@ -133,8 +162,6 @@ export const updateDoctorById = async (req, res) => {
 
     const sanitizedData = sanitizeDoctorData(req.body);
 
-
-
     if (sanitizedData.department) {
       const department = await DepartmentModel.findById(
         sanitizedData.department,
@@ -146,31 +173,44 @@ export const updateDoctorById = async (req, res) => {
     }
 
     // ==================================================
-    // Update Doctor
+    // Photo Upload to Cloudinary (if new photo provided)
     // ==================================================
-    if (req.file) {
-      const photoDataUri = `data:${req.file.mimetype};base64,${req.file.buffer.toString("base64")}`;
-      try {
-        const uploadResult = await cloudinary.uploader.upload(photoDataUri, {
-          folder: "doctors",
-          resource_type: "image",
-        });
-        sanitizedData.photo = uploadResult.secure_url;
-      } catch (uploadErr) {
-        console.error("Cloudinary upload error:", uploadErr);
-        return respond(res, 400, false, "Failed to upload photo");
+    const uploadedFile = getUploadedFile(req);
+    let photoDetails = null;
+    try {
+      if (uploadedFile) {
+        photoDetails = await uploadFileToCloudinaryDetails(uploadedFile, FOLDERS.DOCTOR);
+      } else if (sanitizedData.photo && sanitizedData.photo !== existingDoctor.photo) {
+        photoDetails = await uploadToCloudinaryDetails(sanitizedData.photo, FOLDERS.DOCTOR);
       }
-    } else if (sanitizedData.photo) {
-      try {
-        const uploadResult = await cloudinary.uploader.upload(sanitizedData.photo, {
-          folder: "doctors",
-          resource_type: "image",
-        });
-        sanitizedData.photo = uploadResult.secure_url;
-      } catch (uploadErr) {
-        console.error("Cloudinary upload error:", uploadErr);
-        return respond(res, 400, false, "Failed to upload photo");
+    } catch (uploadErr) {
+      console.error("Cloudinary upload error:", uploadErr);
+      const errMsg = uploadErr?.message || (typeof uploadErr === "string" ? uploadErr : "Cloudinary image upload failed");
+      return respond(res, 400, false, errMsg);
+    }
+
+    if (photoDetails) {
+      // Delete old photo from Cloudinary if public_id exists
+      if (existingDoctor.photoPublicId && photoDetails.public_id !== existingDoctor.photoPublicId) {
+        await deleteFromCloudinary(existingDoctor.photoPublicId);
       }
+      sanitizedData.photo = photoDetails.url;
+      sanitizedData.photoPublicId = photoDetails.public_id;
+    }
+
+    // Synchronize department changes if doctor moves to a new department
+    if (
+      sanitizedData.department &&
+      sanitizedData.department.toString() !== existingDoctor.department?.toString()
+    ) {
+      if (existingDoctor.department) {
+        await DepartmentModel.findByIdAndUpdate(existingDoctor.department, {
+          $pull: { doctors: id },
+        });
+      }
+      await DepartmentModel.findByIdAndUpdate(sanitizedData.department, {
+        $addToSet: { doctors: id },
+      });
     }
 
     const updatedDoctor = await populateDoctors(
@@ -216,6 +256,18 @@ export const deleteDoctorById = async (req, res) => {
 
     if (!doctor) {
       return respond(res, 404, false, "Doctor not found");
+    }
+
+    // Delete doctor image from Cloudinary if photoPublicId exists
+    if (doctor.photoPublicId) {
+      await deleteFromCloudinary(doctor.photoPublicId);
+    }
+
+    // Remove doctor ID from Department schema doctors array
+    if (doctor.department) {
+      await DepartmentModel.findByIdAndUpdate(doctor.department, {
+        $pull: { doctors: id },
+      });
     }
 
     await doctor.deleteOne();
