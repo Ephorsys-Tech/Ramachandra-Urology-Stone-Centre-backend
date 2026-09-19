@@ -4,12 +4,12 @@ const settingSchema = new mongoose.Schema(
   {
     hospitalName: {
       type: String,
-      default: "Usthi Hospital",
+      default: "Ramachandra Urology & Stone Centre",
       trim: true,
     },
     tagline: {
       type: String,
-      default: "Caring for life",
+      default: "Centre for Advanced Kidney Care & Laparoscopic Surgeries",
       trim: true,
     },
     logo: {
@@ -18,12 +18,12 @@ const settingSchema = new mongoose.Schema(
     },
     emergencyPhone: {
       type: String,
-      default: "9090963722",
+      default: "9937566625",
       trim: true,
     },
     contactEmail: {
       type: String,
-      default: "info@usthihospital.com",
+      default: "ruasc.burla@gmail.com",
       trim: true,
     },
     address: {
