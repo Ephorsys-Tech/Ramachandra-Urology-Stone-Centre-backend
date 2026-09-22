@@ -21,9 +21,9 @@ const router = express.Router();
 
 // ── Admin Routes (Protected) ──────────────────────────────────────────────────
 
-// Get ALL features across departments
+// Get ALL features across departments (Public & Navbar)
 // GET → /api/v1/feature/all
-router.get("/all", protect, getAllFeatures);
+router.get("/all", getAllFeatures);
 
 // Add a new feature
 // POST → /api/v1/feature/add
