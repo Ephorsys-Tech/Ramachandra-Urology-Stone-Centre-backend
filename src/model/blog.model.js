@@ -7,6 +7,12 @@ const blogSchema = new mongoose.Schema(
       required: [true, "Blog title is required"],
       trim: true,
     },
+    slug: {
+      type: String,
+      trim: true,
+      lowercase: true,
+      index: true,
+    },
     content: {
       type: String,
       required: [true, "Blog content is required"],
