@@ -21,11 +21,20 @@ const REFRESH_EXPIRY = process.env.JWT_REFRESH_EXPIRY || "7d";
 // Examples: "15m" → 900000ms  |  "7d" → 604800000ms
 const parseDuration = (value, fallbackMs) => {
   if (!value) return fallbackMs;
-  const match = String(value).trim().match(/^(\d+)(s|m|h|d)$/);
+  const str = String(value).trim();
+  if (/^\d+$/.test(str)) {
+    return parseInt(str, 10);
+  }
+  const match = str.match(/^(\d+)(s|m|h|d)$/i);
   if (!match) return fallbackMs;
   const num = parseInt(match[1], 10);
-  const unit = match[2];
-  const multipliers = { s: 1000, m: 60 * 1000, h: 60 * 60 * 1000, d: 24 * 60 * 60 * 1000 };
+  const unit = match[2].toLowerCase();
+  const multipliers = {
+    s: 1000,
+    m: 60 * 1000,
+    h: 60 * 60 * 1000,
+    d: 24 * 60 * 60 * 1000,
+  };
   return num * multipliers[unit];
 };
 
