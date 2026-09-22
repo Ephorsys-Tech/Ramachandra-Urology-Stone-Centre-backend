@@ -1,6 +1,7 @@
 import express from "express";
 import protect from "../middleware/auth.middleware.js";
 import {
+  getAllFeatures,
   addFeature,
   updateFeatureById,
   deleteFeatureById,
@@ -18,6 +19,10 @@ const router = express.Router();
 // ─────────────────────────────────────────────────────────────────────────────
 
 // ── Admin Routes (Protected) ──────────────────────────────────────────────────
+
+// Get ALL features across departments
+// GET → /api/v1/feature/all
+router.get("/all", protect, getAllFeatures);
 
 // Add a new feature
 // POST → /api/v1/feature/add

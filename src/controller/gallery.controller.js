@@ -5,13 +5,47 @@ import { io } from "../../server.js";
 import cloudinary from "../config/cloudinary.js";
 
 // ======================================================
+// Helpers for Cloudinary Public ID Extraction & Deletion
+// ======================================================
+
+const getPublicIdFromUrl = (url) => {
+  if (!url || typeof url !== "string") return null;
+  try {
+    const parts = url.split("/");
+    const uploadIndex = parts.indexOf("upload");
+    if (uploadIndex === -1) return null;
+
+    const pathParts = parts.slice(uploadIndex + 1);
+    if (pathParts[0] && /^v\d+$/.test(pathParts[0])) {
+      pathParts.shift();
+    }
+    const fullPath = pathParts.join("/");
+    const lastDotIndex = fullPath.lastIndexOf(".");
+    return lastDotIndex !== -1 ? fullPath.substring(0, lastDotIndex) : fullPath;
+  } catch (err) {
+    return null;
+  }
+};
+
+const deleteImageFromCloudinary = async (publicId, imageUrl) => {
+  const pid = publicId || getPublicIdFromUrl(imageUrl);
+  if (pid) {
+    try {
+      await cloudinary.uploader.destroy(pid);
+    } catch (err) {
+      console.warn("Cloudinary deletion warning for public_id:", pid, err.message);
+    }
+  }
+};
+
+// ======================================================
 // Create Gallery
 // POST -> /api/v1/gallery/create
 // ======================================================
 
 export const createGallery = async (req, res) => {
   try {
-    const { title, description, images } = req.body;
+    const { title, description } = req.body;
 
     // ======================================================
     // Validation
@@ -28,30 +62,36 @@ export const createGallery = async (req, res) => {
     // Create Gallery
     // ======================================================
 
-    // Determine image URL
+    // Determine image URL and public_id
     let imageUrl = "";
+    let imagePublicId = "";
+
     if (req.file) {
-      // If multer provided a file (buffer), upload directly
-      imageUrl = await new Promise((resolve, reject) => {
+      const uploadResult = await new Promise((resolve, reject) => {
         const stream = cloudinary.uploader.upload_stream(
           { folder: "hospital/galleries" },
           (error, result) => {
             if (error) reject(error);
-            else resolve(result.secure_url);
+            else resolve(result);
           }
         );
         stream.end(req.file.buffer);
       });
-    } else if (req.body.image) {
-      // If a base64 data URL is sent in the body, upload that directly
-      const uploadResult = await cloudinary.uploader.upload(req.body.image, { folder: "hospital/galleries" });
       imageUrl = uploadResult.secure_url || "";
+      imagePublicId = uploadResult.public_id || "";
+    } else if (req.body.image) {
+      const uploadResult = await cloudinary.uploader.upload(req.body.image, {
+        folder: "hospital/galleries",
+      });
+      imageUrl = uploadResult.secure_url || "";
+      imagePublicId = uploadResult.public_id || "";
     }
 
     const gallery = await Gallery.create({
       title,
       description,
       image: imageUrl,
+      imagePublicId,
     });
 
     // ======================================================
@@ -205,20 +245,34 @@ export const updateGallery = async (req, res) => {
 
     // Determine image URL if a new image is provided
     let imageUrl = undefined;
-    if (req.file) {
-      imageUrl = await new Promise((resolve, reject) => {
-        const stream = cloudinary.uploader.upload_stream(
-          { folder: "hospital/galleries" },
-          (error, result) => {
-            if (error) reject(error);
-            else resolve(result.secure_url);
-          }
-        );
-        stream.end(req.file.buffer);
-      });
-    } else if (req.body.image) {
-      const uploadResult = await cloudinary.uploader.upload(req.body.image, { folder: "hospital/galleries" });
-      imageUrl = uploadResult.secure_url || "";
+    let imagePublicId = undefined;
+
+    if (req.file || req.body.image) {
+      const existingGallery = await Gallery.findById(id);
+      if (existingGallery && (existingGallery.imagePublicId || existingGallery.image)) {
+        await deleteImageFromCloudinary(existingGallery.imagePublicId, existingGallery.image);
+      }
+
+      if (req.file) {
+        const uploadResult = await new Promise((resolve, reject) => {
+          const stream = cloudinary.uploader.upload_stream(
+            { folder: "hospital/galleries" },
+            (error, result) => {
+              if (error) reject(error);
+              else resolve(result);
+            }
+          );
+          stream.end(req.file.buffer);
+        });
+        imageUrl = uploadResult.secure_url || "";
+        imagePublicId = uploadResult.public_id || "";
+      } else if (req.body.image) {
+        const uploadResult = await cloudinary.uploader.upload(req.body.image, {
+          folder: "hospital/galleries",
+        });
+        imageUrl = uploadResult.secure_url || "";
+        imagePublicId = uploadResult.public_id || "";
+      }
     }
 
     const updateData = {
@@ -227,6 +281,7 @@ export const updateGallery = async (req, res) => {
     };
     if (imageUrl !== undefined) {
       updateData.image = imageUrl;
+      updateData.imagePublicId = imagePublicId;
     }
 
     const updatedGallery = await Gallery.findByIdAndUpdate(
@@ -300,15 +355,11 @@ export const deleteGallery = async (req, res) => {
     }
 
     // ======================================================
-    // Delete Images From Cloudinary
+    // Delete Image From Cloudinary
     // ======================================================
 
-    if (gallery.images?.length > 0) {
-      for (const image of gallery.images) {
-        if (image.public_id) {
-          await cloudinary.uploader.destroy(image.public_id);
-        }
-      }
+    if (gallery.imagePublicId || gallery.image) {
+      await deleteImageFromCloudinary(gallery.imagePublicId, gallery.image);
     }
 
     // ======================================================
@@ -340,3 +391,4 @@ export const deleteGallery = async (req, res) => {
     });
   }
 };
+
