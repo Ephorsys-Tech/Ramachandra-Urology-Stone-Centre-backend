@@ -16,6 +16,10 @@ const gallerySchema = new mongoose.Schema({
     image:{
         type: String,
         required: [true, "Image is required"],
+    },
+    imagePublicId: {
+        type: String,
+        default: "",
     }
 }, 
 {
