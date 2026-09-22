@@ -443,10 +443,25 @@ export const getAllPatients = async (req, res) => {
   try {
     const page = parseInt(req.query.page, 10) || 1;
     const limit = parseInt(req.query.limit, 10);
+    const search = req.query.search?.trim();
+    const status = req.query.status?.trim();
+
+    let filter = {};
+    if (status && status !== "All") {
+      filter.status = status;
+    }
+    if (search) {
+      const searchRegex = new RegExp(search, "i");
+      filter.$or = [
+        { name: searchRegex },
+        { phone: searchRegex },
+        { disease: searchRegex },
+      ];
+    }
+
     const skip = (page - 1) * (limit || 0);
 
-    // Fetch patients with doctor and department details, sorted by creation date
-    let query = PatientModel.find()
+    let query = PatientModel.find(filter)
       .populate("doctor")
       .populate("department")
       .populate("history.doctor")
@@ -458,8 +473,8 @@ export const getAllPatients = async (req, res) => {
     }
 
     const patients = await query;
-    const totalPatients = await PatientModel.countDocuments();
-    const totalPages = limit ? Math.ceil(totalPatients / limit) : 1;
+    const totalPatients = await PatientModel.countDocuments(filter);
+    const totalPages = limit ? Math.max(1, Math.ceil(totalPatients / limit)) : 1;
 
     return respond(res, 200, true, "Patients retrieved successfully", { patients, totalPages, totalPatients, currentPage: page });
   } catch (error) {

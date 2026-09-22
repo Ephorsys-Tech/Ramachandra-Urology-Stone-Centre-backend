@@ -280,27 +280,37 @@ export const deleteDoctorById = async (req, res) => {
   }
 };
 
-// ======================================================
+// =============================================================================
 // Get All Doctors
 // GET -> /api/v1/doctor/getAll
-// ======================================================
+// =============================================================================
 
 export const getAllDoctors = async (req, res) => {
   try {
-    // Pagination: page and limit via query params
-    const { page: pageQuery, limit: limitQuery } = req.query || {};
+    // Pagination & Search: page, limit, search via query params
+    const { page: pageQuery, limit: limitQuery, search } = req.query || {};
+
+    let query = {};
+    if (search && search.trim()) {
+      const searchRegex = new RegExp(search.trim(), "i");
+      query.$or = [
+        { name: searchRegex },
+        { email: searchRegex },
+        { phone: searchRegex },
+        { specialization: searchRegex },
+      ];
+    }
 
     const page = Math.max(1, parseInt(pageQuery, 10) || 1);
     let limit = parseInt(limitQuery, 10) || 10;
-    // cap limit to prevent expensive requests
     if (limit > 100) limit = 100;
 
     const skip = (page - 1) * limit;
 
-    const total = await DoctorModel.countDocuments();
+    const total = await DoctorModel.countDocuments(query);
 
     const doctors = await populateDoctors(
-      DoctorModel.find()
+      DoctorModel.find(query)
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit),

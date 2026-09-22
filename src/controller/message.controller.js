@@ -12,158 +12,68 @@ export const sendMessage = async (req, res) => {
   try {
     const { name, email, phone, subject, message } = req.body;
 
+    // ─── Required Fields Check ───────────────────────────────────────────────
     if (!name || !email || !phone || !message) {
       return respond(res, 400, false, "Name, email, phone, and message are required");
     }
 
+    // ─── Name Validation (no numbers allowed) ────────────────────────────────
+    const nameRegex = /^[a-zA-Z\s.'-]+$/;
+    if (!nameRegex.test(name.trim())) {
+      return respond(res, 400, false, "Name must not contain numbers or special characters");
+    }
+    if (name.trim().length < 2 || name.trim().length > 50) {
+      return respond(res, 400, false, "Name must be between 2 and 50 characters");
+    }
+
+    // ─── Email Validation ────────────────────────────────────────────────────
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email.trim())) {
+      return respond(res, 400, false, "Please provide a valid email address");
+    }
+
+    // ─── Phone Validation ────────────────────────────────────────────────────
+    const phoneTrimmed = phone.trim();
+    const phoneRegex = /^[6-9][0-9]{9}$/;
+    if (/[a-zA-Z]/.test(phoneTrimmed)) {
+      return respond(res, 400, false, "Phone number must not contain alphabets");
+    }
+    if (!/^\d+$/.test(phoneTrimmed)) {
+      return respond(res, 400, false, "Phone number must contain digits only");
+    }
+    if (phoneTrimmed.length !== 10) {
+      return respond(res, 400, false, "Phone number must be exactly 10 digits");
+    }
+    if (!phoneRegex.test(phoneTrimmed)) {
+      return respond(res, 400, false, "Phone number must start with 6, 7, 8, or 9");
+    }
+
+    // ─── Message Validation ──────────────────────────────────────────────────
+    const messageTrimmed = message.trim();
+    if (messageTrimmed.length < 10) {
+      return respond(res, 400, false, "Message must be at least 10 characters long");
+    }
+    if (messageTrimmed.length > 1000) {
+      return respond(res, 400, false, "Message must not exceed 1000 characters");
+    }
+
+    // ─── Subject Validation (optional field) ─────────────────────────────────
+    const subjectTrimmed = subject ? subject.trim() : "General Inquiry";
+    if (subject && subjectTrimmed.length > 100) {
+      return respond(res, 400, false, "Subject must not exceed 100 characters");
+    }
+
+    // ─── Save to DB ───────────────────────────────────────────────────────────
     const newMessage = await Message.create({
-      name,
-      email,
-      phone,
-      subject: subject || "General Inquiry",
-      message,
+      name: name.trim(),
+      email: email.trim().toLowerCase(),
+      phone: phoneTrimmed,
+      subject: subjectTrimmed,
+      message: messageTrimmed,
     });
 
-    // Emit live Socket.io event to connected admins
+    // ─── Emit Socket.io Event ─────────────────────────────────────────────────
     io.emit("messageAdded", newMessage);
-
-    // Send auto-response confirmation email to the user (non-blocking)
-    sendEmail({
-      to: email,
-      subject: `Thank you for contacting Ramachandra Urology & Stone Centre: ${subject || "General Inquiry"}`,
-      text: `Dear ${name},\n\nThank you for reaching out to Ramachandra Urology & Stone Centre. We have received your inquiry regarding "${subject || "General Inquiry"}" and will get back to you shortly.\n\nYour message details:\nName: ${name}\nPhone: ${phone}\nMessage: ${message}\n\nBest regards,\nRamachandra Hospital Team`,
-      html: `<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <title>Inquiry Received - Ramachandra Urology & Stone Centre</title>
-  <style>
-    body {
-      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-      background-color: #f8fafc;
-      color: #334155;
-      margin: 0;
-      padding: 0;
-    }
-    .container {
-      max-width: 600px;
-      margin: 30px auto;
-      background-color: #ffffff;
-      border-radius: 16px;
-      overflow: hidden;
-      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
-      border: 1px solid #e2e8f0;
-    }
-    .header {
-      background: linear-gradient(135deg, #012442 0%, #0FA8D6 100%);
-      color: #ffffff;
-      padding: 40px 20px;
-      text-align: center;
-    }
-    .header h1 {
-      margin: 0;
-      font-size: 24px;
-      font-weight: 700;
-      letter-spacing: -0.5px;
-    }
-    .header p {
-      margin: 5px 0 0;
-      font-size: 14px;
-      opacity: 0.9;
-    }
-    .content {
-      padding: 40px 30px;
-      line-height: 1.6;
-    }
-    .content p {
-      margin: 0 0 20px;
-      font-size: 16px;
-    }
-    .details {
-      background-color: #f1f5f9;
-      border-radius: 12px;
-      padding: 20px;
-      margin: 30px 0;
-    }
-    .details-title {
-      font-weight: 700;
-      font-size: 14px;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      color: #64748b;
-      margin-bottom: 12px;
-    }
-    .detail-item {
-      margin-bottom: 10px;
-      font-size: 14px;
-    }
-    .detail-item:last-child {
-      margin-bottom: 0;
-    }
-    .detail-label {
-      font-weight: 600;
-      color: #475569;
-      width: 80px;
-      display: inline-block;
-    }
-    .detail-value {
-      color: #0f172a;
-    }
-    .footer {
-      background-color: #f8fafc;
-      color: #94a3b8;
-      text-align: center;
-      padding: 20px;
-      font-size: 12px;
-      border-top: 1px solid #e2e8f0;
-    }
-  </style>
-</head>
-<body>
-  <div class="container">
-    <div class="header">
-      <h1>We have received your message</h1>
-      <p>Ramachandra Urology & Stone Centre - Helpdesk</p>
-    </div>
-    <div class="content">
-      <p>Dear <strong>${name}</strong>,</p>
-      <p>Thank you for reaching out to Ramachandra Urology & Stone Centre. We have received your inquiry and our team is currently reviewing the details. We will get back to you as soon as possible.</p>
-      
-      <div class="details">
-        <div class="details-title">Inquiry Details</div>
-        <div class="detail-item">
-          <span class="detail-label">Subject:</span>
-          <span class="detail-value">${subject || "General Inquiry"}</span>
-        </div>
-        <div class="detail-item">
-          <span class="detail-label">Name:</span>
-          <span class="detail-value">${name}</span>
-        </div>
-        <div class="detail-item">
-          <span class="detail-label">Phone:</span>
-          <span class="detail-value">${phone}</span>
-        </div>
-        <div class="detail-item" style="margin-top: 12px;">
-          <span class="detail-label" style="display: block; margin-bottom: 4px;">Message:</span>
-          <div style="background-color: #ffffff; padding: 12px; border-radius: 8px; border: 1px solid #e2e8f0; color: #334155; font-style: italic; white-space: pre-wrap;">${message}</div>
-        </div>
-      </div>
-      
-      <p>If this is an emergency, please call our 24/7 helpline immediately at <strong>+91 99375 66625</strong>.</p>
-      <p>Best regards,<br><strong>Ramachandra Urology & Stone Centre Team</strong></p>
-    </div>
-    <div class="footer">
-      <p>&copy; ${new Date().getFullYear()} Ramachandra Urology & Stone Centre. All rights reserved.</p>
-      <p>This is an automated response. Please do not reply directly to this email.</p>
-    </div>
-  </div>
-</body>
-</html>`
-    }).then(() => {
-      console.log("Auto-response confirmation email sent successfully to:", email);
-    }).catch(error => {
-      console.error("Auto-response confirmation email error:", error);
-    });
 
     return respond(res, 201, true, "Message sent successfully", newMessage);
   } catch (error) {
@@ -171,7 +81,6 @@ export const sendMessage = async (req, res) => {
     return respond(res, 500, false, error.message || "Failed to send message");
   }
 };
-
 // ======================================================
 // Get All Messages (Admin only)
 // GET -> /api/v1/message/all
