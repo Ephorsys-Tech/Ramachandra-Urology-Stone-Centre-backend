@@ -7,7 +7,7 @@ import mongoose from "mongoose";
 //   doctors  → DoctorModel   (Doctor.department points back here)
 //   features → FeatureModel  (Feature.department points back here)
 //   diseases → DiseaseModel  (Disease.department points back here)
-//
+// 
 // Public UI shows only:
 //   - departments  where published = true
 //   - features     where isActive  = true
