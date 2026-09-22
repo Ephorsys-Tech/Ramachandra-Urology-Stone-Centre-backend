@@ -1,7 +1,58 @@
 import mongoose from "mongoose";
+import sanitizeHtml from "sanitize-html";
 import Blog from "../model/blog.model.js";
 import DoctorModel from "../model/doctor.model.js";
 import cloudinary from "../config/cloudinary.js";
+
+// Helper to sanitize rich-text HTML content from TipTap
+const sanitizeBlogContent = (dirtyHtml) => {
+  if (!dirtyHtml) return "";
+  return sanitizeHtml(dirtyHtml, {
+    allowedTags: [
+      "h1", "h2", "h3", "h4", "h5", "h6",
+      "p", "strong", "b", "em", "i", "u", "s", "strike",
+      "blockquote", "ul", "ol", "li",
+      "a", "img", "hr", "br",
+      "pre", "code", "span", "div",
+      "table", "thead", "tbody", "tr", "th", "td"
+    ],
+    allowedAttributes: {
+      a: ["href", "name", "target", "rel"],
+      img: ["src", "srcset", "alt", "title", "width", "height", "loading"],
+      span: ["style", "class"],
+      p: ["style", "class"],
+      h1: ["style", "class"],
+      h2: ["style", "class"],
+      h3: ["style", "class"],
+      h4: ["style", "class"],
+      div: ["style", "class"],
+      code: ["class"],
+      pre: ["class"]
+    },
+    allowedSchemes: ["http", "https", "mailto", "tel", "data"],
+    allowedSchemesByTag: {
+      img: ["http", "https", "data"]
+    },
+    allowedStyles: {
+      "*": {
+        "text-align": [/^left$/, /^right$/, /^center$/, /^justify$/],
+        "font-size": [/^\d+(?:px|em|rem|%)$/],
+        "font-weight": [/^\d+$/, /^bold$/, /^normal$/]
+      }
+    }
+  });
+};
+
+// Helper to generate a clean URL slug
+const generateSlug = (title) => {
+  if (!title) return "";
+  return title
+    .toLowerCase()
+    .trim()
+    .replace(/[^\w\s-]/g, "")
+    .replace(/[\s_-]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+};
 
 // Helper to upload image to Cloudinary
 const uploadToCloudinary = async (file, bodyImage) => {
@@ -65,9 +116,17 @@ export const createBlog = async (req, res) => {
       day: "numeric",
     });
 
+    const sanitizedHtml = sanitizeBlogContent(content);
+    let baseSlug = generateSlug(title);
+    const existingWithSlug = await Blog.findOne({ slug: baseSlug });
+    if (existingWithSlug) {
+      baseSlug = `${baseSlug}-${Date.now().toString().slice(-4)}`;
+    }
+
     const blog = await Blog.create({
       title,
-      content,
+      slug: baseSlug,
+      content: sanitizedHtml,
       description,
       image: imageUrl,
       category: category || "General",
@@ -121,7 +180,7 @@ export const getBlogs = async (req, res) => {
     }
 
     const blogs = await Blog.find(filter)
-      .populate("doctorAuthor", "name photo specialization")
+      .populate("doctorAuthor", "name photo specialization qualifications description experience languages timing email")
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit);
@@ -160,21 +219,22 @@ export const getBlogs = async (req, res) => {
 };
 
 // ======================================================
-// Get Blog By ID
-// GET -> /api/v1/blog/get/:id
+// Get Blog By ID or Slug
+// GET -> /api/v1/blog/get/:id (or :slug)
 // ======================================================
 export const getBlogById = async (req, res) => {
   try {
     const { id } = req.params;
 
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(400).json({
-        success: false,
-        message: "Invalid blog ID",
-      });
+    let blog = null;
+    if (mongoose.Types.ObjectId.isValid(id)) {
+      blog = await Blog.findById(id).populate("doctorAuthor", "name photo specialization qualifications description experience languages timing email");
     }
-
-    const blog = await Blog.findById(id).populate("doctorAuthor", "name photo specialization");
+    
+    // If not found by ObjectId or if param is a slug, search by slug
+    if (!blog) {
+      blog = await Blog.findOne({ slug: id }).populate("doctorAuthor", "name photo specialization qualifications description experience languages timing email");
+    }
 
     if (!blog) {
       return res.status(404).json({
@@ -234,8 +294,13 @@ export const updateBlog = async (req, res) => {
     }
 
     const updateData = {};
-    if (title) updateData.title = title;
-    if (content) updateData.content = content;
+    if (title) {
+      updateData.title = title;
+      const newSlug = generateSlug(title);
+      const existingSlug = await Blog.findOne({ slug: newSlug, _id: { $ne: id } });
+      updateData.slug = existingSlug ? `${newSlug}-${Date.now().toString().slice(-4)}` : newSlug;
+    }
+    if (content) updateData.content = sanitizeBlogContent(content);
     if (description) updateData.description = description;
     if (category) updateData.category = category;
     if (readTime) updateData.readTime = readTime;
@@ -247,7 +312,7 @@ export const updateBlog = async (req, res) => {
     const updatedBlog = await Blog.findByIdAndUpdate(id, updateData, {
       new: true,
       runValidators: true,
-    }).populate("doctorAuthor", "name photo specialization");
+    }).populate("doctorAuthor", "name photo specialization qualifications description experience languages timing email");
 
     if (!updatedBlog) {
       return res.status(404).json({
