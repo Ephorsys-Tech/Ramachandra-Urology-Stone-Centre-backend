@@ -4,6 +4,15 @@ import DepartmentModel from "../model/department.model.js";
 import { respond } from "../util/respond.js";
 import { io } from "../../server.js";
 
+// Helper: generate URL-safe slug
+const generateSlug = (name) =>
+  name
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9\s-]/g, "")
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-");
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Helper: populate department name only
 // ─────────────────────────────────────────────────────────────────────────────
@@ -34,7 +43,7 @@ export const getAllFeatures = async (req, res) => {
 // =============================================================================
 export const addFeature = async (req, res) => {
   try {
-    const { name, description, department, isActive, orderIndex } = req.body;
+    const { name, slug, description, department, isActive, orderIndex } = req.body;
 
     // ── Validation ────────────────────────────────────────────────────────────
     if (!name || !name.trim()) {
@@ -53,9 +62,12 @@ export const addFeature = async (req, res) => {
       return respond(res, 404, false, "Department not found");
     }
 
+    const finalSlug = slug ? generateSlug(slug) : generateSlug(name);
+
     // ── Create ────────────────────────────────────────────────────────────────
     const feature = await FeatureModel.create({
       name:        name.trim(),
+      slug:        finalSlug,
       description: description?.trim() || "",
       department,
       isActive:    isActive !== undefined ? (typeof isActive === "string" ? isActive === "true" : Boolean(isActive)) : true,
@@ -95,7 +107,7 @@ export const updateFeatureById = async (req, res) => {
       return respond(res, 404, false, "Feature not found");
     }
 
-    const { name, description, department, isActive, orderIndex } = req.body;
+    const { name, slug, description, department, isActive, orderIndex } = req.body;
 
     // ── Validate department if changing ───────────────────────────────────────
     if (department !== undefined) {
@@ -118,7 +130,11 @@ export const updateFeatureById = async (req, res) => {
     }
 
     // ── Apply updates ─────────────────────────────────────────────────────────
-    if (name !== undefined)        feature.name        = name.trim();
+    if (name !== undefined) feature.name = name.trim();
+    if (slug !== undefined || name !== undefined) {
+      const targetName = name !== undefined ? name.trim() : feature.name;
+      feature.slug = slug ? generateSlug(slug) : generateSlug(targetName);
+    }
     if (description !== undefined) feature.description = description.trim();
     if (isActive !== undefined)    feature.isActive    = typeof isActive === "string" ? isActive === "true" : Boolean(isActive);
     if (orderIndex !== undefined)  feature.orderIndex  = Number(orderIndex);
@@ -286,7 +302,38 @@ export const getFeatureById = async (req, res) => {
 
     return respond(res, 200, true, "Feature retrieved successfully", feature);
   } catch (error) {
-    console.error("Get Feature Error:", error);
+    console.error("Get Feature By ID Error:", error);
+    return respond(res, 500, false, error.message || "Internal Server Error");
+  }
+};
+
+// =============================================================================
+// GET FEATURE BY SLUG OR ID (Public)
+// GET → /api/v1/feature/getBySlug/:slug
+// @access Public
+// =============================================================================
+export const getFeatureBySlug = async (req, res) => {
+  try {
+    const { slug } = req.params;
+    if (!slug) {
+      return respond(res, 400, false, "Feature slug is required");
+    }
+
+    let feature = null;
+    if (mongoose.Types.ObjectId.isValid(slug)) {
+      feature = await populateFeature(FeatureModel.findById(slug));
+    }
+    if (!feature) {
+      feature = await populateFeature(FeatureModel.findOne({ slug }));
+    }
+
+    if (!feature) {
+      return respond(res, 404, false, "Feature not found");
+    }
+
+    return respond(res, 200, true, "Feature retrieved successfully", feature);
+  } catch (error) {
+    console.error("Get Feature By Slug Error:", error);
     return respond(res, 500, false, error.message || "Internal Server Error");
   }
 };

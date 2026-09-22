@@ -9,6 +9,7 @@ import {
   getAllFeaturesByDepartment,
   getActiveFeaturesByDepartment,
   getFeatureById,
+  getFeatureBySlug,
 } from "../controller/feature.controller.js";
 
 const router = express.Router();
@@ -53,5 +54,9 @@ router.get("/getById/:id", protect, getFeatureById);
 // Get ONLY active features by department (for frontend/public users)
 // GET → /api/v1/feature/getActiveByDepartment/:departmentId
 router.get("/getActiveByDepartment/:departmentId", getActiveFeaturesByDepartment);
+
+// Get single feature by slug or ID (public)
+// GET → /api/v1/feature/getBySlug/:slug
+router.get("/getBySlug/:slug", getFeatureBySlug);
 
 export default router;

@@ -19,6 +19,12 @@ const featureSchema = new mongoose.Schema(
       maxlength: [150, "Feature name cannot exceed 150 characters"],
     },
 
+    slug: {
+      type: String,
+      trim: true,
+      lowercase: true,
+    },
+
     description: {
       type: String,
       trim: true,
