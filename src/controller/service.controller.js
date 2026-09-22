@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import ServiceModel from "../model/services.model.js";
+import FeatureModel from "../model/feature.model.js";
 import validateServiceData from "../util/validateServiceData.js";
 import { respond } from "../util/respond.js";
 import { io } from "../../server.js";
@@ -324,7 +325,7 @@ export const toggleServiceStatus = async (req, res) => {
 };
 
 // =============================================================================
-// GET SERVICES BY FEATURE ID (Public)
+// GET SERVICES BY FEATURE ID OR SLUG (Public)
 // GET → /api/v1/service/getByFeature/:featureId
 // @access Public
 // =============================================================================
@@ -335,10 +336,20 @@ export const getServicesByFeature = async (req, res) => {
       return respond(res, 400, false, "Feature ID or slug is required");
     }
 
+    let targetFeatureId = featureId;
+    if (!mongoose.Types.ObjectId.isValid(featureId)) {
+      const feat = await FeatureModel.findOne({ slug: featureId.toLowerCase() });
+      if (feat) {
+        targetFeatureId = feat._id;
+      } else {
+        return respond(res, 200, true, "No services found for feature", []);
+      }
+    }
+
     const services = await populateService(
       ServiceModel.find({
         published: true,
-        features: featureId,
+        features: targetFeatureId,
       }).sort({ orderIndex: 1, createdAt: -1 })
     );
 
