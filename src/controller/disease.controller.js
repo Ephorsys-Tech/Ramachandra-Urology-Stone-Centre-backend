@@ -11,6 +11,23 @@ const populateDisease = (query) =>
   query.populate("department", "name slug");
 
 // =============================================================================
+// GET ALL DISEASES (Admin — sees all diseases across all departments)
+// GET → /api/v1/disease/all
+// @access Private (Admin)
+// =============================================================================
+export const getAllDiseases = async (req, res) => {
+  try {
+    const diseases = await DiseaseModel.find({})
+      .sort({ orderIndex: 1, createdAt: -1 })
+      .populate("department", "name slug");
+    return respond(res, 200, true, "Diseases retrieved successfully", diseases);
+  } catch (error) {
+    console.error("Get All Diseases Error:", error);
+    return respond(res, 500, false, error.message || "Internal Server Error");
+  }
+};
+
+// =============================================================================
 // ADD DISEASE
 // POST → /api/v1/disease/add
 // @access Private (Admin)
