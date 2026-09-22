@@ -126,9 +126,7 @@ export const loginAdmin = async (req, res) => {
       name: admin.name,
       email: admin.email,
       role: admin.role,
-      // Access token is also returned in the body so the client can store
-      // it in memory (NOT localStorage) for Bearer-header based requests.
-      // accessToken,
+      accessToken,
     });
   } catch (error) {
     console.error("Login Admin Error:", error);
@@ -196,7 +194,7 @@ export const refreshTokenAdmin = async (req, res) => {
       name: admin.name,
       email: admin.email,
       role: admin.role,
-      // accessToken: newAccessToken,
+      accessToken: newAccessToken,
     });
   } catch (error) {
     return respond(res, 401, false, "Token refresh failed", { error: error.message });

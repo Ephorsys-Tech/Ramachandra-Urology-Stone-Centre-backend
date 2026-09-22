@@ -11,6 +11,23 @@ const populateFeature = (query) =>
   query.populate("department", "name slug");
 
 // =============================================================================
+// GET ALL FEATURES (Admin — sees all features across all departments)
+// GET → /api/v1/feature/all
+// @access Private (Admin)
+// =============================================================================
+export const getAllFeatures = async (req, res) => {
+  try {
+    const features = await FeatureModel.find({})
+      .sort({ orderIndex: 1, createdAt: -1 })
+      .populate("department", "name slug");
+    return respond(res, 200, true, "Features retrieved successfully", features);
+  } catch (error) {
+    console.error("Get All Features Error:", error);
+    return respond(res, 500, false, error.message || "Internal Server Error");
+  }
+};
+
+// =============================================================================
 // ADD FEATURE
 // POST → /api/v1/feature/add
 // @access Private (Admin)

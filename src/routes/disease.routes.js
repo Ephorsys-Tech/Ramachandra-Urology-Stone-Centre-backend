@@ -1,6 +1,7 @@
 import express from "express";
 import protect from "../middleware/auth.middleware.js";
 import {
+  getAllDiseases,
   addDisease,
   updateDiseaseById,
   deleteDiseaseById,
@@ -18,6 +19,10 @@ const router = express.Router();
 // ─────────────────────────────────────────────────────────────────────────────
 
 // ── Admin Routes (Protected) ──────────────────────────────────────────────────
+
+// Get ALL diseases across departments
+// GET → /api/v1/disease/all
+router.get("/all", protect, getAllDiseases);
 
 // Add a new disease
 // POST → /api/v1/disease/add
