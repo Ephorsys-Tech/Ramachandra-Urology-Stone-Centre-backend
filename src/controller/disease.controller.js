@@ -11,16 +11,48 @@ const populateDisease = (query) =>
   query.populate("department", "name slug");
 
 // =============================================================================
-// GET ALL DISEASES (Admin — sees all diseases across all departments)
+// GET ALL DISEASES (Admin — sees diseases with backend pagination, search, filter)
 // GET → /api/v1/disease/all
 // @access Private (Admin)
 // =============================================================================
 export const getAllDiseases = async (req, res) => {
   try {
-    const diseases = await DiseaseModel.find({})
+    const { page: pageQuery, limit: limitQuery, search, department } = req.query || {};
+
+    let query = {};
+    if (department && department !== "all") {
+      query.department = department;
+    }
+    if (search && search.trim()) {
+      const searchRegex = new RegExp(search.trim(), "i");
+      query.$or = [{ name: searchRegex }, { description: searchRegex }];
+    }
+
+    const page = Math.max(1, parseInt(pageQuery, 10) || 1);
+    const limit = parseInt(limitQuery, 10);
+
+    let diseasesQuery = DiseaseModel.find(query)
       .sort({ orderIndex: 1, createdAt: -1 })
       .populate("department", "name slug");
-    return respond(res, 200, true, "Diseases retrieved successfully", diseases);
+
+    if (limit) {
+      const skip = (page - 1) * limit;
+      diseasesQuery = diseasesQuery.skip(skip).limit(limit);
+    }
+
+    const diseases = await diseasesQuery;
+    const total = await DiseaseModel.countDocuments(query);
+    const totalPages = limit ? Math.max(1, Math.ceil(total / limit)) : 1;
+    const activeCount = await DiseaseModel.countDocuments({ isActive: true });
+
+    return respond(res, 200, true, "Diseases retrieved successfully", {
+      diseases,
+      total,
+      totalPages,
+      page,
+      limit: limit || total,
+      activeCount,
+    });
   } catch (error) {
     console.error("Get All Diseases Error:", error);
     return respond(res, 500, false, error.message || "Internal Server Error");

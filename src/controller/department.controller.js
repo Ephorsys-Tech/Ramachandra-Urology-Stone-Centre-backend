@@ -314,12 +314,27 @@ export const deleteDepartmentById = async (req, res) => {
 };
 
 // =============================================================================
-// GET ALL DEPARTMENTS (Admin — all, including unpublished)
+// GET ALL DEPARTMENTS (Admin — sees all, with backend pagination & search)
 // GET → /api/v1/department/getAll
 // @access Private (Admin)
 // =============================================================================
 export const getAllDepartments = async (req, res) => {
   try {
+    const { page: pageQuery, limit: limitQuery, search } = req.query || {};
+
+    let query = {};
+    if (search && search.trim()) {
+      const searchRegex = new RegExp(search.trim(), "i");
+      query.$or = [
+        { name: searchRegex },
+        { description: searchRegex },
+        { category: searchRegex },
+      ];
+    }
+
+    const page = Math.max(1, parseInt(pageQuery, 10) || 1);
+    const limit = parseInt(limitQuery, 10);
+
     const rawDepartments = await DepartmentModel.find().select("_id");
     await Promise.all([
       syncDepartmentDoctors(rawDepartments),
@@ -327,11 +342,24 @@ export const getAllDepartments = async (req, res) => {
       syncDepartmentDiseases(rawDepartments),
     ]);
 
-    const departments = await populateDepartment(
-      DepartmentModel.find().sort({ orderIndex: 1, createdAt: -1 })
-    );
+    let deptQuery = DepartmentModel.find(query).sort({ orderIndex: 1, createdAt: -1 });
 
-    return respond(res, 200, true, "Departments retrieved successfully", departments);
+    if (limit) {
+      const skip = (page - 1) * limit;
+      deptQuery = deptQuery.skip(skip).limit(limit);
+    }
+
+    const departments = await populateDepartment(deptQuery);
+    const total = await DepartmentModel.countDocuments(query);
+    const totalPages = limit ? Math.max(1, Math.ceil(total / limit)) : 1;
+
+    return respond(res, 200, true, "Departments retrieved successfully", {
+      departments,
+      total,
+      totalPages,
+      page,
+      limit: limit || total,
+    });
   } catch (error) {
     console.error("Get All Departments Error:", error);
     return respond(res, 500, false, error.message || "Internal Server Error");

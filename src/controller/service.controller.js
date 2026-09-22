@@ -19,16 +19,45 @@ const populateService = (query) =>
   query.populate("features", "name description isActive orderIndex");
 
 // =============================================================================
-// GET ALL SERVICES (Admin - fetches all services)
+// GET ALL SERVICES (Admin - fetches services with backend pagination & search)
 // GET → /api/v1/service/all
 // @access Private (Admin)
 // =============================================================================
 export const getAllServices = async (req, res) => {
   try {
-    const services = await populateService(
-      ServiceModel.find({}).sort({ orderIndex: 1, createdAt: -1 })
-    );
-    return respond(res, 200, true, "Services retrieved successfully", services);
+    const { page: pageQuery, limit: limitQuery, search } = req.query || {};
+
+    let query = {};
+    if (search && search.trim()) {
+      const searchRegex = new RegExp(search.trim(), "i");
+      query.$or = [
+        { name: searchRegex },
+        { shortDescription: searchRegex },
+        { description: searchRegex },
+      ];
+    }
+
+    const page = Math.max(1, parseInt(pageQuery, 10) || 1);
+    const limit = parseInt(limitQuery, 10);
+
+    let serviceQuery = ServiceModel.find(query).sort({ orderIndex: 1, createdAt: -1 });
+
+    if (limit) {
+      const skip = (page - 1) * limit;
+      serviceQuery = serviceQuery.skip(skip).limit(limit);
+    }
+
+    const services = await populateService(serviceQuery);
+    const total = await ServiceModel.countDocuments(query);
+    const totalPages = limit ? Math.max(1, Math.ceil(total / limit)) : 1;
+
+    return respond(res, 200, true, "Services retrieved successfully", {
+      services,
+      total,
+      totalPages,
+      page,
+      limit: limit || total,
+    });
   } catch (error) {
     console.error("Get All Services Error:", error);
     return respond(res, 500, false, error.message || "Internal Server Error");

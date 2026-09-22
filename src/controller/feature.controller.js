@@ -20,16 +20,48 @@ const populateFeature = (query) =>
   query.populate("department", "name slug");
 
 // =============================================================================
-// GET ALL FEATURES (Admin — sees all features across all departments)
+// GET ALL FEATURES (Admin — sees features with backend pagination, search, filter)
 // GET → /api/v1/feature/all
 // @access Private (Admin)
 // =============================================================================
 export const getAllFeatures = async (req, res) => {
   try {
-    const features = await FeatureModel.find({})
+    const { page: pageQuery, limit: limitQuery, search, department } = req.query || {};
+
+    let query = {};
+    if (department && department !== "all") {
+      query.department = department;
+    }
+    if (search && search.trim()) {
+      const searchRegex = new RegExp(search.trim(), "i");
+      query.$or = [{ name: searchRegex }, { description: searchRegex }];
+    }
+
+    const page = Math.max(1, parseInt(pageQuery, 10) || 1);
+    const limit = parseInt(limitQuery, 10);
+
+    let featuresQuery = FeatureModel.find(query)
       .sort({ orderIndex: 1, createdAt: -1 })
       .populate("department", "name slug");
-    return respond(res, 200, true, "Features retrieved successfully", features);
+
+    if (limit) {
+      const skip = (page - 1) * limit;
+      featuresQuery = featuresQuery.skip(skip).limit(limit);
+    }
+
+    const features = await featuresQuery;
+    const total = await FeatureModel.countDocuments(query);
+    const totalPages = limit ? Math.max(1, Math.ceil(total / limit)) : 1;
+    const activeCount = await FeatureModel.countDocuments({ isActive: true });
+
+    return respond(res, 200, true, "Features retrieved successfully", {
+      features,
+      total,
+      totalPages,
+      page,
+      limit: limit || total,
+      activeCount,
+    });
   } catch (error) {
     console.error("Get All Features Error:", error);
     return respond(res, 500, false, error.message || "Internal Server Error");
