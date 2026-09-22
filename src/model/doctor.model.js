@@ -64,6 +64,23 @@ const doctorSchema = new mongoose.Schema(
       trim: true,
       default: "",
     },
+    about: {
+      type: String,
+      trim: true,
+      default: "",
+    },
+    expertise: {
+      type: [String],
+      default: [],
+    },
+    publications: {
+      type: [String],
+      default: [],
+    },
+    certifications: {
+      type: [String],
+      default: [],
+    },
     languages: {
       type: String,
       trim: true,
