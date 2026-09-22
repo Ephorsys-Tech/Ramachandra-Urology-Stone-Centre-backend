@@ -9,6 +9,8 @@ import appointmentRequestRoutes from "../routes/appointmentRequest.routes.js";
 import galleryRoutes from "../routes/gallery.routes.js";
 import messageRoutes from "../routes/message.routes.js";
 import settingRoutes from "../routes/setting.routes.js";
+import blogRoutes from "../routes/blog.routes.js";
+import serviceRoutes from "../routes/service.routes.js";
 
 const router = express.Router();
 
@@ -43,6 +45,11 @@ router.use("/feature", featureRoutes);
 router.use("/disease", diseaseRoutes);
 
 //===========================================
+// Service Routes
+//===========================================
+router.use("/service", serviceRoutes);
+
+//===========================================
 // Appointment Request Routes
 //===========================================
 router.use("/appointment-request", appointmentRequestRoutes);
@@ -65,7 +72,6 @@ router.use("/setting", settingRoutes);
 //===========================================
 // Blog Routes
 //===========================================
-import blogRoutes from "../routes/blog.routes.js";
 router.use("/blog", blogRoutes);
 
 export default router;
