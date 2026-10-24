@@ -12,19 +12,29 @@ const doctorSchema = new mongoose.Schema(
 
     email: {
       type: String,
-      required: [true, "Doctor email is required"],
+      required: false,
+      default: "",
       lowercase: true,
       trim: true,
-      match: [
-        /^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/,
-        "Please enter a valid email",
-      ],
+      validate: {
+        validator: function (v) {
+          return !v || /^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/.test(v);
+        },
+        message: "Please enter a valid email",
+      },
     },
 
     phone: {
       type: String,
-      required: [true, "Doctor phone number is required"],
-      match: [/^[0-9]{10}$/, "Phone number must be exactly 10 digits"],
+      required: false,
+      default: "",
+      trim: true,
+      validate: {
+        validator: function (v) {
+          return !v || /^[0-9]{10}$/.test(v);
+        },
+        message: "Phone number must be exactly 10 digits",
+      },
     },
 
     specialization: {
