@@ -44,11 +44,9 @@ const syncDepartmentDoctors = async (departments) => {
     if (!dept || !dept._id) continue;
     const assignedDoctors = await DoctorModel.find({ department: dept._id }).select("_id");
     const assignedIds = assignedDoctors.map((d) => d._id);
-    if (assignedIds.length > 0) {
-      await DepartmentModel.findByIdAndUpdate(dept._id, {
-        $addToSet: { doctors: { $each: assignedIds } },
-      });
-    }
+    await DepartmentModel.findByIdAndUpdate(dept._id, {
+      $set: { doctors: assignedIds },
+    });
   }
 };
 
@@ -156,6 +154,16 @@ export const addDepartment = async (req, res) => {
       orderIndex:         orderIndex         || 0,
     });
 
+    if (validDoctorIds.length > 0) {
+      await DoctorModel.updateMany({ _id: { $in: validDoctorIds } }, { department: department._id });
+    }
+    if (validFeatureIds.length > 0) {
+      await FeatureModel.updateMany({ _id: { $in: validFeatureIds } }, { department: department._id });
+    }
+    if (validDiseaseIds.length > 0) {
+      await DiseaseModel.updateMany({ _id: { $in: validDiseaseIds } }, { department: department._id });
+    }
+
     const populated = await populateDepartment(DepartmentModel.findById(department._id));
 
     io.emit("departmentAdded", populated);
@@ -256,6 +264,16 @@ export const updateDepartmentById = async (req, res) => {
     department.orderIndex         = orderIndex         ?? department.orderIndex;
 
     await department.save();
+
+    if (parsedDoctors && parsedDoctors.length > 0) {
+      await DoctorModel.updateMany({ _id: { $in: parsedDoctors } }, { department: department._id });
+    }
+    if (parsedFeatures && parsedFeatures.length > 0) {
+      await FeatureModel.updateMany({ _id: { $in: parsedFeatures } }, { department: department._id });
+    }
+    if (parsedDiseases && parsedDiseases.length > 0) {
+      await DiseaseModel.updateMany({ _id: { $in: parsedDiseases } }, { department: department._id });
+    }
 
     const populated = await populateDepartment(DepartmentModel.findById(department._id));
 

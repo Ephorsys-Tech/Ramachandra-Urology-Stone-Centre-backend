@@ -16,8 +16,6 @@ const validateDoctorData = (data) => {
 
   if (
     !name ||
-    !email ||
-    !phone ||
     !specialization ||
     experience === undefined ||
     !department
@@ -38,24 +36,25 @@ const validateDoctorData = (data) => {
   }
 
   // ==================================================
-  // Email Validation
+  // Email Validation (Optional)
   // ==================================================
 
-  const emailRegex =
-    /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-  if (!emailRegex.test(email)) {
-    return "Invalid email format";
+  if (email) {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return "Invalid email format";
+    }
   }
 
   // ==================================================
-  // Phone Validation
+  // Phone Validation (Optional)
   // ==================================================
 
-  const phoneRegex = /^[0-9]{10}$/;
-
-  if (!phoneRegex.test(phone)) {
-    return "Phone number must be exactly 10 digits";
+  if (phone) {
+    const phoneRegex = /^[0-9]{10}$/;
+    if (!phoneRegex.test(phone)) {
+      return "Phone number must be exactly 10 digits";
+    }
   }
 
   // ==================================================
